@@ -324,6 +324,40 @@ app.delete('/api/user/cards/top', authenticate, async (req, res) => {
     }
 });
 
+// API (User): Lấy toàn bộ danh sách thẻ
+app.get('/api/user/cards', authenticate, async (req, res) => {
+    try {
+        const cardsRef = db.ref(`users/${req.user.username}/cardsQueue`);
+        const snapshot = await cardsRef.once('value');
+        let cards = snapshot.val() || [];
+        res.json({ cards });
+    } catch (error) {
+        console.error("Lỗi lấy toàn bộ thẻ:", error);
+        res.status(500).json({ error: 'Lỗi server nội bộ' });
+    }
+});
+
+// API (User): Xoá thẻ tại vị trí index
+app.delete('/api/user/cards/index/:index', authenticate, async (req, res) => {
+    try {
+        const { index } = req.params;
+        const idx = Number(index);
+        const cardsRef = db.ref(`users/${req.user.username}/cardsQueue`);
+        const snapshot = await cardsRef.once('value');
+        let cards = snapshot.val() || [];
+        if (idx >= 0 && idx < cards.length) {
+            cards.splice(idx, 1);
+            await cardsRef.set(cards);
+            res.json({ success: true, remaining: cards.length });
+        } else {
+            res.status(400).json({ error: 'Vị trí không tồn tại' });
+        }
+    } catch (error) {
+        console.error("Lỗi xoá thẻ tại index:", error);
+        res.status(500).json({ error: 'Lỗi server nội bộ' });
+    }
+});
+
 // API (Test / Template cho các chức năng khác cho user sử dụng)
 app.get('/api/protected-feature', authenticate, (req, res) => {
     if (req.user.role === 2) {
