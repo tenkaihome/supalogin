@@ -225,6 +225,30 @@ app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
     }
 });
 
+// API (Admin): Xoá tài khoản người dùng
+app.delete('/api/admin/users/:username', authenticate, requireAdmin, async (req, res) => {
+    const { username } = req.params;
+    if (!username) {
+        return res.status(400).json({ error: 'Cần cung cấp username' });
+    }
+    // Không cho phép xoá tài khoản tự xoá chính mình (an toàn)
+    if (username === req.user.username) {
+        return res.status(403).json({ error: 'Không thể tự xoá chính mình' });
+    }
+    try {
+        const userRef = db.ref(`users/${username}`);
+        const snapshot = await userRef.once('value');
+        if (!snapshot.exists()) {
+            return res.status(404).json({ error: `Tài khoản ${username} không tồn tại` });
+        }
+        await userRef.remove();
+        res.json({ message: `Xoá tài khoản ${username} thành công!` });
+    } catch (error) {
+        console.error("Lỗi xoá user:", error);
+        res.status(500).json({ error: 'Lỗi server nội bộ' });
+    }
+});
+
 // API (Test / Template cho các chức năng khác cho user sử dụng)
 app.get('/api/protected-feature', authenticate, (req, res) => {
     if (req.user.role === 2) {
