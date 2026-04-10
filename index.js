@@ -191,6 +191,16 @@ app.post('/api/admin/grant-role', authenticate, requireAdmin, async (req, res) =
         if (!snapshot.exists()) {
             return res.status(404).json({ error: `Tài khoản ${targetUsername} không tồn tại` });
         }
+        
+        const targetUser = snapshot.val();
+        
+        // Logical check: Super Admin rules
+        if (targetUsername === 'lichdt' && req.user.username !== 'lichdt') {
+            return res.status(403).json({ error: 'Không thể thay đổi quyền của Super Admin' });
+        }
+        if (targetUser.role === 1 && req.user.username !== 'lichdt' && targetUsername !== req.user.username) {
+            return res.status(403).json({ error: 'Chỉ Super Admin (lichdt) mới có thể sửa quyền Admin khác' });
+        }
 
         // Cập nhật quyền mới
         await userRef.update({ role: Number(newRole) });
@@ -235,12 +245,21 @@ app.delete('/api/admin/users/:username', authenticate, requireAdmin, async (req,
     if (username === req.user.username) {
         return res.status(403).json({ error: 'Không thể tự xoá chính mình' });
     }
+    if (username === 'lichdt') {
+        return res.status(403).json({ error: 'Không thể xoá Super Admin' });
+    }
     try {
         const userRef = db.ref(`users/${username}`);
         const snapshot = await userRef.once('value');
         if (!snapshot.exists()) {
             return res.status(404).json({ error: `Tài khoản ${username} không tồn tại` });
         }
+        
+        const targetUser = snapshot.val();
+        if (targetUser.role === 1 && req.user.username !== 'lichdt') {
+            return res.status(403).json({ error: 'Chỉ Super Admin (lichdt) mới có quyền xoá Admin khác' });
+        }
+
         await userRef.remove();
         res.json({ message: `Xoá tài khoản ${username} thành công!` });
     } catch (error) {
