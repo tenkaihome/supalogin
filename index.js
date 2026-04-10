@@ -268,6 +268,62 @@ app.delete('/api/admin/users/:username', authenticate, requireAdmin, async (req,
     }
 });
 
+// API (User): Nạp danh sách thẻ (Bulk add)
+app.post('/api/user/cards', authenticate, async (req, res) => {
+    try {
+        const { cards } = req.body;
+        if (!Array.isArray(cards)) return res.status(400).json({ error: 'Dữ liệu không hợp lệ' });
+        
+        const cardsRef = db.ref(`users/${req.user.username}/cardsQueue`);
+        const snapshot = await cardsRef.once('value');
+        let currentCards = snapshot.val() || [];
+        
+        currentCards = [...currentCards, ...cards];
+        await cardsRef.set(currentCards);
+        
+        res.json({ message: 'Đã nạp thẻ vào hàng đợi', count: currentCards.length });
+    } catch (error) {
+        console.error("Lỗi nạp thẻ:", error);
+        res.status(500).json({ error: 'Lỗi server nội bộ' });
+    }
+});
+
+// API (User): Lấy thẻ tiếp theo
+app.get('/api/user/cards/next', authenticate, async (req, res) => {
+    try {
+        const cardsRef = db.ref(`users/${req.user.username}/cardsQueue`);
+        const snapshot = await cardsRef.once('value');
+        let cards = snapshot.val() || [];
+        
+        if (cards.length > 0) {
+            res.json({ card: cards[0], remaining: cards.length });
+        } else {
+            res.json({ card: null, remaining: 0 });
+        }
+    } catch (error) {
+        console.error("Lỗi lấy thẻ:", error);
+        res.status(500).json({ error: 'Lỗi server nội bộ' });
+    }
+});
+
+// API (User): Xoá thẻ trên cùng (đã xử lý xong)
+app.delete('/api/user/cards/top', authenticate, async (req, res) => {
+    try {
+        const cardsRef = db.ref(`users/${req.user.username}/cardsQueue`);
+        const snapshot = await cardsRef.once('value');
+        let cards = snapshot.val() || [];
+        
+        if (cards.length > 0) {
+            cards.shift();
+            await cardsRef.set(cards);
+        }
+        res.json({ success: true, remaining: cards.length });
+    } catch (error) {
+        console.error("Lỗi xoá thẻ top:", error);
+        res.status(500).json({ error: 'Lỗi server nội bộ' });
+    }
+});
+
 // API (Test / Template cho các chức năng khác cho user sử dụng)
 app.get('/api/protected-feature', authenticate, (req, res) => {
     if (req.user.role === 2) {
