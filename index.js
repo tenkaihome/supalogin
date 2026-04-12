@@ -337,6 +337,18 @@ app.get('/api/user/cards', authenticate, async (req, res) => {
     }
 });
 
+// API (User): Xoá toàn bộ thẻ trong hàng đợi
+app.delete('/api/user/cards', authenticate, async (req, res) => {
+    try {
+        const cardsRef = db.ref(`users/${req.user.username}/cardsQueue`);
+        await cardsRef.remove();
+        res.json({ success: true, message: 'Đã xoá toàn bộ thẻ' });
+    } catch (error) {
+        console.error("Lỗi xoá queue:", error);
+        res.status(500).json({ error: 'Lỗi server nội bộ' });
+    }
+});
+
 // API (User): Xoá thẻ tại vị trí index
 app.delete('/api/user/cards/index/:index', authenticate, async (req, res) => {
     try {
