@@ -224,10 +224,12 @@ app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
 
         const usersData = snapshot.val();
         // Lọc bỏ password
+        const now = Date.now();
         const usersList = Object.keys(usersData).map(key => ({
             username: usersData[key].username,
             role: usersData[key].role,
-            avatar: usersData[key].avatar || ""
+            avatar: usersData[key].avatar || "",
+            is_online: (now - (usersData[key].last_active || 0)) < 60000
         }));
 
         res.json(usersList);
@@ -368,6 +370,18 @@ app.delete('/api/user/cards/index/:index', authenticate, async (req, res) => {
         }
     } catch (error) {
         console.error("Lỗi xoá thẻ tại index:", error);
+        res.status(500).json({ error: 'Lỗi server nội bộ' });
+    }
+});
+
+// API (User): Cập nhật trạng thái hoạt động (Ping)
+app.put('/api/user/ping', authenticate, async (req, res) => {
+    try {
+        const userRef = db.ref(`users/${req.user.username}`);
+        await userRef.update({ last_active: Date.now() });
+        res.json({ success: true });
+    } catch (error) {
+        console.error("Lỗi ping:", error);
         res.status(500).json({ error: 'Lỗi server nội bộ' });
     }
 });
