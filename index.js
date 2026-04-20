@@ -163,7 +163,8 @@ app.post('/api/login', async (req, res) => {
             token,
             user: {
                 username: user.username,
-                role: user.role
+                role: user.role,
+                avatar: user.avatar || ""
             }
         });
     } catch (error) {
@@ -225,7 +226,8 @@ app.get('/api/admin/users', authenticate, requireAdmin, async (req, res) => {
         // Lọc bỏ password
         const usersList = Object.keys(usersData).map(key => ({
             username: usersData[key].username,
-            role: usersData[key].role
+            role: usersData[key].role,
+            avatar: usersData[key].avatar || ""
         }));
 
         res.json(usersList);
@@ -366,6 +368,94 @@ app.delete('/api/user/cards/index/:index', authenticate, async (req, res) => {
         }
     } catch (error) {
         console.error("Lỗi xoá thẻ tại index:", error);
+        res.status(500).json({ error: 'Lỗi server nội bộ' });
+    }
+});
+
+// API (User): Cập nhật profile (Avatar, Username, Password)
+app.put('/api/user/profile', authenticate, async (req, res) => {
+    const { newAvatar, newPassword, newUsername } = req.body;
+    const oldUsername = req.user.username;
+    
+    try {
+        const oldUserRef = db.ref(`users/${oldUsername}`);
+        const snapshot = await oldUserRef.once('value');
+        if (!snapshot.exists()) return res.status(404).json({ error: 'Tài khoản không tồn tại' });
+        
+        let userData = snapshot.val();
+        
+        if (newPassword) {
+            const { oldPassword } = req.body;
+            if (!oldPassword) {
+                return res.status(400).json({ error: 'Cần cung cấp mật khẩu cũ để đổi mật khẩu' });
+            }
+            
+            let isMatch = false;
+            try {
+                isMatch = await bcrypt.compare(oldPassword, userData.password);
+            } catch (e) {
+                if (oldPassword === userData.password) isMatch = true;
+            }
+            if (!isMatch && oldPassword === userData.password) {
+                isMatch = true;
+            }
+
+            if (!isMatch) {
+                return res.status(401).json({ error: 'Mật khẩu cũ không đúng' });
+            }
+
+            const salt = await bcrypt.genSalt(10);
+            userData.password = await bcrypt.hash(newPassword, salt);
+        }
+        
+        if (newAvatar !== undefined) {
+            userData.avatar = newAvatar;
+        }
+
+        let tokenHasChanged = false;
+        let targetUsername = oldUsername;
+
+        if (newUsername && newUsername !== oldUsername) {
+            const newUserRef = db.ref(`users/${newUsername}`);
+            const newSnapshot = await newUserRef.once('value');
+            if (newSnapshot.exists()) {
+                return res.status(400).json({ error: 'Username này đã tồn tại' });
+            }
+            
+            userData.username = newUsername;
+            
+            const updates = {};
+            updates[`users/${newUsername}`] = userData;
+            updates[`users/${oldUsername}`] = null;
+            await db.ref().update(updates);
+            
+            targetUsername = newUsername;
+            tokenHasChanged = true;
+        } else {
+            await oldUserRef.set(userData);
+        }
+
+        let newToken;
+        if (tokenHasChanged) {
+            newToken = jwt.sign(
+                { username: targetUsername, role: userData.role },
+                JWT_SECRET,
+                { expiresIn: '24h' }
+            );
+        }
+
+        res.json({
+            message: 'Cập nhật thành công',
+            user: {
+                username: userData.username,
+                role: userData.role,
+                avatar: userData.avatar || ""
+            },
+            token: newToken
+        });
+
+    } catch (error) {
+        console.error("Lỗi cập nhật profile:", error);
         res.status(500).json({ error: 'Lỗi server nội bộ' });
     }
 });
