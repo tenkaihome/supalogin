@@ -272,6 +272,61 @@ app.delete('/api/admin/users/:username', authenticate, requireAdmin, async (req,
     }
 });
 
+// API (Admin): Xoá tài khoản người dùng hàng loạt
+app.post('/api/admin/users/bulk-delete', authenticate, requireAdmin, async (req, res) => {
+    const { usernames } = req.body;
+    if (!Array.isArray(usernames) || usernames.length === 0) {
+        return res.status(400).json({ error: 'Cần cung cấp danh sách usernames' });
+    }
+
+    try {
+        const usersRef = db.ref('users');
+        const snapshot = await usersRef.once('value');
+        if (!snapshot.exists()) {
+            return res.status(404).json({ error: 'Không tìm thấy người dùng nào' });
+        }
+        
+        const allUsers = snapshot.val();
+        const deletedUsernames = [];
+        const errors = [];
+
+        for (const username of usernames) {
+            // Không cho phép xoá tài khoản tự xoá chính mình (an toàn)
+            if (username === req.user.username) {
+                errors.push(`Không thể tự xoá chính mình (${username})`);
+                continue;
+            }
+            if (username === 'lichdt') {
+                errors.push(`Không thể xoá Super Admin (${username})`);
+                continue;
+            }
+            
+            const targetUser = allUsers[username];
+            if (!targetUser) {
+                errors.push(`Tài khoản ${username} không tồn tại`);
+                continue;
+            }
+            
+            if (targetUser.role === 1 && req.user.username !== 'lichdt') {
+                errors.push(`Chỉ Super Admin (lichdt) mới có quyền xoá Admin khác (${username})`);
+                continue;
+            }
+
+            await db.ref(`users/${username}`).remove();
+            deletedUsernames.push(username);
+        }
+
+        res.json({
+            message: `Đã xoá thành công ${deletedUsernames.length} tài khoản.`,
+            deleted: deletedUsernames,
+            errors: errors.length > 0 ? errors : undefined
+        });
+    } catch (error) {
+        console.error("Lỗi xoá hàng loạt user:", error);
+        res.status(500).json({ error: 'Lỗi server nội bộ' });
+    }
+});
+
 // API (User): Nạp danh sách thẻ (Bulk add)
 app.post('/api/user/cards', authenticate, async (req, res) => {
     try {
